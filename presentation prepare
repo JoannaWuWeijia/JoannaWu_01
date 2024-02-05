@@ -69,4 +69,4 @@ plt.ylabel('Values')
 plt.show()
 ```
 
-
+# 3D example(
