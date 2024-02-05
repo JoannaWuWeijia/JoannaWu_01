@@ -1,0 +1,14 @@
+##  Matplotlib 
+
+Matplotlib is a library designed for plotting and arranging data visually in Python, usually in twodimensional. It was created by Dr. John Hunter in 2003 to enable a MATLAB-like plotting interface in Python
+Matplotlib is widely used because of its simplicity and effectiveness.
+
+The library can be installed using either `pip` or `conda`. 
+
+Type "pip install matplotlib" in your terminal
+
+There are several types of graphs such as:
+1. Lineplot
+2. Barplot
+3. Scatterplot
+4. 3D plot
