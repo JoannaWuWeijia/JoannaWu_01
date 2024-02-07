@@ -42,7 +42,7 @@ y2 = df['LATITUDE']
 ax1.plot(x, y1, 'g', label='sin(x)')
 ax1.set_title('Line Plot')
 ax1.set_xlabel('x')
-ax1.set_ylabel('sin(x)')
+ax1.set_ylabel('y')
 ax1.legend()
 ax1.grid(True)
 
