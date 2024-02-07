@@ -1,5 +1,5 @@
 ###  Matplotlib 
-https://drive.google.com/file/d/1es1MaZVztxXTzJ5BCrxUznEwJbPN1zS2/view?usp=sharing
+https://drive.google.com/file/d/1rlbhFkhuuUzJEnJ60Cc7qQ-BCWirymO7/view?usp=sharing
 
 #Matplotlib is a library designed for plotting and arranging data visually in Python, usually in twodimensional. It was created by Dr. John Hunter in 2003 to enable a MATLAB-like plotting interface in Python
 #Matplotlib is widely used because of its simplicity and effectiveness.
@@ -27,6 +27,18 @@ plt.ylabel('r value')
 plt.grid(True)
 plt.show()
 # The positive part of a parabola
+
+r2 = [i**3 for i in t]
+plt.figure(figsize=(4, 4)) 
+
+plt.plot(t, r, linestyle = '--', color = 'r', marker = 'o', label = 'r')
+plt.plot(t, r2, linestyle = '-', color = 'b', marker = 'v', label = 'r2')
+
+plt.title('Line Plot Example2')
+plt.xlabel('t value')
+plt.ylabel('r value')
+plt.grid(True)
+plt.show()
 
 #and this is an example of scatterplot, 
 
@@ -81,6 +93,29 @@ plt.xlabel('Categories')
 plt.ylabel('Values')
 plt.show()
 
+x = np.linspace(0, 10, 10)
+y = np.linspace(0, 20, 10)
+```
+here are examples of Boxplot and Histogram:
+```{python
+fig, axs = plt.subplots(1, 2, figsize=(12, 10), sharey=True)
+
+
+# Boxplot
+axs[0].boxplot(y1)
+axs[0].set_xlabel("x label")
+axs[0].set_ylabel("y label")
+axs[0].set_title("boxplot")
+
+
+# Histogram
+
+axs[1].hist(np.random.randn(100))
+axs[1].set_xlabel("x label")
+axs[1].set_ylabel("y label")
+axs[1].set_title("histogram")
+
+plt.show()
 ```
 # 3D example
 
