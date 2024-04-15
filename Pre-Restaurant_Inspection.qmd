@@ -1,0 +1,430 @@
+---
+title: "Health Compliance Trends in Manhattan Restaurants, 2023"
+subtitle: "Statistics 3255 Final Presentation"
+author: "Joanna(Weijia) Wu"
+format: html
+---
+
+## Outline {.scrollable} 
+- Background Information
+- Data Cleaning
+- Data Description
+- Hypothesis Testing
+- Modeling of Severity
+- Conclusions
+
+# Background Information {.scrollable}
+
+
+## Data Chosen {.scrollable}
+- Data Chosen: Jan 1, 2023 12:00am to Jan 1, 2024 12:00am(data in the year of 2023)
+
+## Research interests
+- What types of restaurants are more likely to have food problems? What kind of food problem?
+- Do food health problems vary significantly across geographic regions? What kind of food problem?
+- In regards to the above two questions, which restaurants are more likely to have serious problems?
+
+## Relevant Resourses {.scrollable} 
+
+# Data Cleaning
+
+## Methodology: {.scrollable}
+- Sort data from Manhattan.
+- Dropped unnecessary columns.
+- Conducted a spatial join with ZIP code data.
+- Added categorization for cuisine, neighborhood and violations.
+
+```{python}
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+from shapely.geometry import Point
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import chi2_contingency
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.preprocessing import OneHotEncoder
+```
+
+```{python}
+# load the data
+
+rest_inspect_raw = pd.read_csv('Restaurant_Inspection.csv')
+```
+
+```{python}
+# Create a new DataFrame 'rest_inspect' where 'BORO' is 'Manhattan'
+rest_inspect = rest_inspect_raw[rest_inspect_raw['BORO'] == 'Manhattan']
+
+# Listing out and Dropping the Unneccessary Columns
+
+columns_unneccessary = [
+    'GRADE', 'GRADE DATE', 'Community Board', 'Council District', 'Census Tract',
+    'BIN', 'NTA', 'Location Point1', 'Community Districts', 'Borough Boundaries',
+    'City Council Districts', 'Police Precincts','PHONE','INSPECTION TYPE','ACTION','BORO'
+]
+
+
+rest_inspect = rest_inspect.drop(columns=columns_unneccessary)
+```
+
+
+
+```{python}
+# load the geodata frame of the ZIPCODES
+gdf = gpd.read_file("https://raw.githubusercontent.com/fedhere/PUI2015_EC/master/mam1612_EC/nyc-zip-code-tabulation-areas-polygons.geojson")
+
+#converts 'rest_inspect' into a GeodataFrame
+gdf_inspect = gpd.GeoDataFrame(
+    rest_inspect,
+    geometry=gpd.points_from_xy(rest_inspect['Longitude'], rest_inspect['Latitude'])
+)
+
+# Spatial join with gdf_zipcodes
+gdf_zipcodes = gpd.sjoin(gdf_inspect, gdf, how="left", op='intersects')
+
+# Fill missing values in 'ZIPCODE' with values from 'postalCode'
+gdf_zipcodes['ZIPCODE'] = gdf_zipcodes['ZIPCODE'].fillna(gdf_zipcodes['postalCode'])
+
+# Replace the origional ZIPCODE
+rest_inspect.reset_index(drop=True, inplace=True)
+gdf_zipcodes.reset_index(drop=True, inplace=True)
+
+rest_inspect['ZIPCODE'] = rest_inspect['ZIPCODE'].astype(str)
+gdf_zipcodes['ZIPCODE'] = gdf_zipcodes['ZIPCODE'].astype(str)
+
+rest_inspect['ZIPCODE'] = gdf_zipcodes['ZIPCODE']
+``` 
+
+```{python}
+# Counting the number of missing values
+missing_values = rest_inspect.isnull().sum()
+print(missing_values)
+```
+
+```{python}
+Restaurants_by_Category = {
+    "East-Asian": ["Chinese", "Japanese", "Asian/Asian Fusion", "Korean", "Chinese/Cuban"],
+    "Southeast-Asian": ["Indian", "Thai", "Southeast Asian", "Filipino", "Bangladeshi", "Indonesian"],
+    "Fast Food": ["Hamburgers", "Hotdogs", "Hotdogs/Pretzels", "Chicken", "Sandwiches",
+                  "Sandwiches/Salads/Mixed Buffet", "Bagels/Pretzels"],
+    "Desserts & Beverages": ["Coffee/Tea", "Bakery Products/Desserts", "Donuts", "Frozen Desserts", 
+                             "Bottled Beverages", "Pancakes/Waffles", "Nuts/Confectionary"],
+    "Latin American & Caribbean": ["Mexican", "Latin American", "Tex-Mex", "Peruvian", "Brazilian", 
+                                   "Caribbean", "Chilean", "Chimichurri"],
+    "Mediterranean & Middle Eastern": ["Mediterranean", "Greek", "Turkish", "Middle Eastern", "Lebanese", 
+                                       "Pakistani", "Afghan"],
+    "European": ["Italian", "French", "Spanish", "Irish", "Eastern European", "Russian", "German", 
+                 "Polish", "Scandinavian", "English", "Portuguese", "Czech", "Basque", "Tapas", "New French"],
+    "American": ["American", "New American", "Californian", "Creole", "Cajun", "Creole/Cajun", "Soul Food", 
+                 "Steakhouse", "Barbecue", "Fusion", "Southwestern"],
+    "Healthy Food": ["Vegan", "Vegetarian", "Salads", "Juice, Smoothies, Fruit Salads", 
+                     "Soups/Salads/Sandwiches", "Soups"],
+    "African & Middle Eastern": ["African", "Moroccan", "Ethiopian", "Egyptian", "Armenian", "Iranian"],
+    "Australasian & Pacific": ["Australian", "Hawaiian"],
+    "Jewish": ["Jewish/Kosher"],
+    "Other": ["Other", "Not Listed/Not Applicable", "Continental", "Haute Cuisine"]
+}
+
+# Maps each cuisine type to its category
+cuisine_to_category = {cuisine: category for category, cuisines in Restaurants_by_Category.items() for cuisine in cuisines}
+
+# Create a new column 'Cuisine Category' based on 'CUISINE DESCRIPTION'
+rest_inspect['Cuisine Category'] = rest_inspect['CUISINE DESCRIPTION'].map(cuisine_to_category).fillna('Other')
+```
+
+```{python}
+rest_inspect['ZIPCODE'] = rest_inspect['ZIPCODE'].apply(lambda x: x[:-2] if isinstance(x, str) and x.endswith('.0') else x)
+
+Neighborhoods_by_ZipCode = {
+    "Financial District": ["10004", "10005", "10006", "10038", "10041", "10000", "10048"],
+    "Battery Park City": ["10280", "10281", "10282"],
+    "Tribeca": ["10007", "10013"],
+    "Lower East Side": ["10002"],
+    "East Village": ["10009", "10003"],
+    "SoHo": ["10012", "10013", "10014"],
+    "Greenwich Village & Chelsea": ["10011", "10012", "10014", "10001", "10011"],
+    "Midtown West": ["10018", "10019", "10036", "10119"],
+    "Midtown East": ["10017", "10022", "10153", "10154", "10155", "10167", "10168", "10169", "10172", "10173"],
+    "Midtown South": ["10001", "10010", "10016", "10103", "10105", "10106", "10107", "10111", "10112", "10118", "10121", "10178", "10179"],
+    "Times Square Area": ["10020", "10036"],
+    "Upper East Side": ["10021", "10028", "10065", "10075", "10128", "10044"],
+    "Upper West Side": ["10023", "10024", "10025", "10069"],
+    "Harlem": ["10026", "10027", "10030", "10031", "10037", "10039"],
+    "Washington Heights": ["10032", "10033", "10034", "10040"],
+    "Inwood": ["10034"],
+    "East Harlem": ["10029", "10035"],
+    "Roosevelt Island": ["10044"]
+}
+
+
+# maps each ZIP code to its neighborhood
+zip_to_neighborhood = {zip_code: neighborhood for neighborhood, zip_codes in Neighborhoods_by_ZipCode.items() for zip_code in zip_codes}
+
+
+# Create a new column 'Neighborhood' based on 'ZIPCODE'
+rest_inspect['Neighborhood'] = rest_inspect['ZIPCODE'].map(zip_to_neighborhood).fillna('Other')
+```
+
+```{python}
+Violation_Codes_by_Category = {
+    "Temperature Control": ["02A", "02B", "02C", "02D", "02F", "02G", "02H", "02I", "05F"],
+    # 02A: Potentially hazardous hot food not heated to 140°F for 15 seconds
+    
+    "Food Source & Condition": ["03A", "03B", "03C", "03D", "03E", "04H", "09A"],
+    # 03A:  Food not from an approved source
+    
+    "Hygiene & Contact": ["04A", "04B", "04C", "04D", "05D", "06A", "06B", "06C", "06D"],
+    # 04B: Food worker with illness, communicable disease
+    # 04C: Bare hand contact with ready-to-eat foods
+    
+    "Facility & Equipment": [
+        "04E", "04F","04I", "04J", "05C", "05E", "10A", "10B", "10C", "10D", "10E", "10F", "10G", "10H",
+        "28-03", "28-04", "28-05"
+    ],
+    # 10A: Toilet facility not properly supplied
+    
+    
+    "Rodent, Pest Sighting": [ "04K", "04L", "04M", "04N", "04O", "04P","08A", "08B", "08C", "28-06"],
+    # 04K: Evidence of rats 
+    
+    "Labeling": [
+        "03I", "03F", "16-01", "16-02", "16-03", "16-04", "16-06", "18-11", "18-12", "18-13", "18-14",
+        "20-01", "20-04", "20-05", "20-06", "20-07", "20-08"
+    ],
+    # Food Protection Certificate not available for inspection
+    
+    "Use & Maintenance": [
+        "05A", "05B", "05H", "06E", "06F", "06G", "06H", "06I", "07A", "15-01", "15-17", "15-21",
+        "15-22", "15-27", "15-29", "15-36", "15-37", "15-39", "15-42"
+    ],
+    # 15-01: Smoking or electronic cigarette use allowed in prohibited area 
+    
+    "Miscellaneous Regulations": [
+        "19-01", "19-03", "19-04", "19-05", "19-06", "19-07", "19-08", "19-10", "19-11", "28-01", "28-07"
+    ]
+}
+
+# Maps each violation code to its category
+violation_to_category = {code: category for category, codes in Violation_Codes_by_Category.items() for code in codes}
+
+# Create a new column 'Violation Category' based on 'VIOLATION CODE'
+rest_inspect['Violation Category'] = rest_inspect['VIOLATION CODE'].map(violation_to_category).fillna('Other')
+``` 
+
+
+## Cleaned Data {.scrollable}
+
+```{python}
+rest_inspect.head()
+```
+
+
+# Data Description
+
+
+## Violation by Cuisine Category  {.scrollable} 
+```{python}
+plt.figure(figsize=(12, 8))
+sns.countplot(data=rest_inspect, y='Cuisine Category', order=rest_inspect['Cuisine Category'].value_counts().index)
+plt.title('Count of Inspections by Cuisine Category')
+plt.xlabel('Counts')
+plt.ylabel('Cuisine Category')
+plt.show()
+
+Cuisine_Violation_Category = rest_inspect.groupby(['Cuisine Category', 'Violation Category']).size().reset_index(name='Counts')
+```
+
+```{python}
+# Use stacked bar chart visualization
+Cuisine_Violation_Category_Table = Cuisine_Violation_Category.pivot(index='Cuisine Category', columns='Violation Category', values='Counts')
+Cuisine_Violation_Category_Table = Cuisine_Violation_Category_Table.fillna(0)
+
+Cuisine_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(12, 8))
+plt.title('Violation Types by Cuisine Category')
+plt.xlabel('Cuisine Category')
+plt.ylabel('Counts of Violations')
+plt.xticks(rotation=45)
+plt.legend(title='Violation Category')
+plt.tight_layout() 
+plt.show()
+```
+
+## Violation by Neighborhood {.scrollable}
+```{python}
+plt.figure(figsize=(12, 8))
+sns.countplot(data=rest_inspect, y='Neighborhood', order=rest_inspect['Neighborhood'].value_counts().index)
+plt.title('Count of Inspections by Neighborhood')
+plt.xlabel('Counts')
+plt.ylabel('Neighborhood')
+plt.show()
+```
+
+```{python}
+Neighborhood_Violation_Category = rest_inspect.groupby(['Neighborhood', 'Violation Category']).size().reset_index(name='Counts')
+
+# Use stacked bar chart visualization
+Neighborhood_Violation_Category_Table = Neighborhood_Violation_Category.pivot(index='Neighborhood', columns='Violation Category', values='Counts')
+Neighborhood_Violation_Category_Table = Neighborhood_Violation_Category_Table.fillna(0)
+
+Neighborhood_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(12, 8))
+plt.title('Violation Types by Neighborhood')
+plt.xlabel('Neighborhood')
+plt.ylabel('Counts of Violations')
+plt.xticks(rotation=45)
+plt.legend(title='Violation Category', loc='upper right')
+plt.tight_layout()
+plt.show()
+```
+
+# Testing Hypothesis {.scrollable}
+
+
+## Cuisine Category and Violation Category {.scrollable}
+
+```{python}
+# Null Hypothesis (H0): No association between Cuisine Category and Violation Category.
+# Alternative Hypothesis (HA): Association between Cuisine Category and Violation Category.
+
+# Create a contingency table for Cuisine Category vs. Violation Category
+cuisine_violation_table = pd.crosstab(rest_inspect['Cuisine Category'], rest_inspect['Violation Category'])
+
+# Perform the chi-square test
+chi2, p, dof, expected = chi2_contingency(cuisine_violation_table)
+
+print(f"Chi-squared Test Statistic: {chi2}")
+print(f"P-value: {p}")
+print(f"Degrees of Freedom: {dof}")
+```
+
+This indicates that *there is a statistically significant association between the type of cuisine and the type of violations*. Different cuisines appear to have different types or frequencies of health violations.
+
+## Food Health Problems Across Geographic Areas{.scrollable}
+
+### Violation by Neighborhood {.scrollable}
+```{python}
+# Null Hypothesis (H0): No association between Cuisine Category and Violation Category.
+# Alternative Hypothesis (HA): Association between Cuisine Category and Violation Category.
+
+# Create a contingency table for Neighborhood vs. Violation Category
+neighborhood_violation_table = pd.crosstab(rest_inspect['Neighborhood'], rest_inspect['Violation Category'])
+
+# Perform the chi-square test
+chi2, p, dof, expected = chi2_contingency(neighborhood_violation_table)
+
+print(f"Chi-squared Test Statistic: {chi2}")
+print(f"P-value: {p}")
+print(f"Degrees of Freedom: {dof}")
+```
+
+This indicates that *there is no statistically significant association between neighborhoods and types of violations*.
+
+### Violation by Zipcode {.scrollable}
+```{python}
+# Null Hypothesis (H0): No association between ZIP Code and Violation Category.
+# Alternative Hypothesis (HA): Association between ZIP Code and Violation Category.
+
+# Create a contingency table for ZIP Code vs. Violation Category
+zipcode_violation_table = pd.crosstab(rest_inspect['ZIPCODE'], rest_inspect['Violation Category'])
+
+# Perform the chi-square test on the ZIP Code data
+chi2, p, dof, expected = chi2_contingency(zipcode_violation_table)
+
+print(f"Chi-squared Test Statistic: {chi2}")
+print(f"P-value: {p}")
+print(f"Degrees of Freedom: {dof}")
+```
+
+This indicates that the geographic area does not significantly affect the type of food health problems reported.
+
+# Model of Severity {.scrollable}
+
+```{python}
+# Create a binary Indicator based on the "CRITICAL FLAG"
+# Use this column to determine if the results's Severity
+
+rest_inspect['Critical Indicator'] = np.where(rest_inspect['CRITICAL FLAG'] == 'Critical', 1, 0)
+```
+
+
+## Logistic Regression Model {.scrollable}
+```{python}
+type_crit = pd.crosstab(rest_inspect['Cuisine Category'], rest_inspect['Critical Indicator'])
+
+chi2, p, dof, expected = chi2_contingency(type_crit)
+
+print(f"Chi-squared Test Statistic: {chi2}")
+print(f"P-value: {p}")
+print(f"Degrees of Freedom: {dof}")
+```
+
+```{python}
+Violation_crit = pd.crosstab(rest_inspect['Violation Category'], rest_inspect['Critical Indicator'])
+
+chi2, p, dof, expected = chi2_contingency(Violation_crit)
+
+print(f"Chi-squared Test Statistic: {chi2}")
+print(f"P-value: {p}")
+print(f"Degrees of Freedom: {dof}")
+```
+
+```{python}
+# transform categorical variables into dummy variables
+encoder = OneHotEncoder(drop='first') 
+X = encoder.fit_transform(rest_inspect[['Violation Category', 'Neighborhood']])
+y = rest_inspect['Critical Indicator']  
+
+# Split the data with 2:8
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Create a Log Regression Model with 100 inters
+logreg_model = LogisticRegression(max_iter=1000, random_state=42)
+logreg_model.fit(X_train, y_train)
+
+# Testing of our model: 
+# Prediction and Evaluation:
+y_pred = logreg_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print("Confusion Matrix:\n", conf_matrix)
+```
+
+
+## Random forests {.scrollable}
+```{python}
+# transform categorical variables into dummy variables
+# drop='first' helps to prevent multicollinearity
+# since 'Violation Category' can be linearly predicted from the 'Cuisine Category'
+
+encoder = OneHotEncoder(drop='first')  
+X = encoder.fit_transform(rest_inspect[['Cuisine Category', 'Violation Category', 'Neighborhood']])
+
+y = rest_inspect['Critical Indicator'] 
+
+# Split the data with 2:8
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Create and Train the Random Forest Model with 100 Trees
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+
+# Testing of our model: 
+# Prediction and Evaluation:
+y_pred = rf_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print("Confusion Matrix:\n", conf_matrix)
+```
+
+
+## Conclusions {.scrollable}
+
+
+
