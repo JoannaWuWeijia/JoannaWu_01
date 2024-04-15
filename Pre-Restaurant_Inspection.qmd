@@ -5,34 +5,36 @@ author: "Joanna(Weijia) Wu"
 format: html
 ---
 
-## Outline {.scrollable} 
-- Background Information
-- Data Cleaning
-- Data Description
-- Hypothesis Testing
-- Modeling of Severity
-- Conclusions
+## Outline {.scrollable}
+
+-   Background Information
+-   Data Cleaning
+-   Data Description
+-   Hypothesis Testing
+-   Modeling of Severity
+-   Conclusions
 
 # Background Information {.scrollable}
 
-
 ## Data Chosen {.scrollable}
-- Data Chosen: Jan 1, 2023 12:00am to Jan 1, 2024 12:00am(data in the year of 2023)
+
+-  Data Chosen: Jan 1, 2023 12:00am to Jan 1, 2024 12:00am(data in the year of 2023)
 
 ## Research interests
-- What types of restaurants are more likely to have food problems? What kind of food problem?
-- Do food health problems vary significantly across geographic regions? What kind of food problem?
-- In regards to the above two questions, which restaurants are more likely to have serious problems?
 
-## Relevant Resourses {.scrollable} 
+-   What types of restaurants are more likely to have food problems? What kind of food problem?
+-   Do food health problems vary significantly across geographic regions? What kind of food problem?
+-   In regards to the above two questions, which restaurants are more likely to have serious problems?
+
 
 # Data Cleaning
 
 ## Methodology: {.scrollable}
-- Sort data from Manhattan.
-- Dropped unnecessary columns.
-- Conducted a spatial join with ZIP code data.
-- Added categorization for cuisine, neighborhood and violations.
+
+-   Sort data from Manhattan.
+-   Dropped unnecessary columns.
+-   Conducted a spatial join with ZIP code data.
+-   Added categorization for cuisine, neighborhood and violations.
 
 ```{python}
 import pandas as pd
@@ -71,11 +73,9 @@ columns_unneccessary = [
 rest_inspect = rest_inspect.drop(columns=columns_unneccessary)
 ```
 
-
-
 ```{python}
 # load the geodata frame of the ZIPCODES
-gdf = gpd.read_file("https://raw.githubusercontent.com/fedhere/PUI2015_EC/master/mam1612_EC/nyc-zip-code-tabulation-areas-polygons.geojson")
+gdf = gpd.read_file("nyc-zip-code-tabulation-areas-polygons.geojson")
 
 #converts 'rest_inspect' into a GeodataFrame
 gdf_inspect = gpd.GeoDataFrame(
@@ -97,7 +97,7 @@ rest_inspect['ZIPCODE'] = rest_inspect['ZIPCODE'].astype(str)
 gdf_zipcodes['ZIPCODE'] = gdf_zipcodes['ZIPCODE'].astype(str)
 
 rest_inspect['ZIPCODE'] = gdf_zipcodes['ZIPCODE']
-``` 
+```
 
 ```{python}
 # Counting the number of missing values
@@ -213,8 +213,7 @@ violation_to_category = {code: category for category, codes in Violation_Codes_b
 
 # Create a new column 'Violation Category' based on 'VIOLATION CODE'
 rest_inspect['Violation Category'] = rest_inspect['VIOLATION CODE'].map(violation_to_category).fillna('Other')
-``` 
-
+```
 
 ## Cleaned Data {.scrollable}
 
@@ -222,13 +221,12 @@ rest_inspect['Violation Category'] = rest_inspect['VIOLATION CODE'].map(violatio
 rest_inspect.head()
 ```
 
-
 # Data Description
 
+## Violation by Cuisine Category {.scrollable}
 
-## Violation by Cuisine Category  {.scrollable} 
 ```{python}
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(10, 8))
 sns.countplot(data=rest_inspect, y='Cuisine Category', order=rest_inspect['Cuisine Category'].value_counts().index)
 plt.title('Count of Inspections by Cuisine Category')
 plt.xlabel('Counts')
@@ -243,7 +241,7 @@ Cuisine_Violation_Category = rest_inspect.groupby(['Cuisine Category', 'Violatio
 Cuisine_Violation_Category_Table = Cuisine_Violation_Category.pivot(index='Cuisine Category', columns='Violation Category', values='Counts')
 Cuisine_Violation_Category_Table = Cuisine_Violation_Category_Table.fillna(0)
 
-Cuisine_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(12, 8))
+Cuisine_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(10, 8))
 plt.title('Violation Types by Cuisine Category')
 plt.xlabel('Cuisine Category')
 plt.ylabel('Counts of Violations')
@@ -254,8 +252,9 @@ plt.show()
 ```
 
 ## Violation by Neighborhood {.scrollable}
+
 ```{python}
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(10, 8))
 sns.countplot(data=rest_inspect, y='Neighborhood', order=rest_inspect['Neighborhood'].value_counts().index)
 plt.title('Count of Inspections by Neighborhood')
 plt.xlabel('Counts')
@@ -270,7 +269,7 @@ Neighborhood_Violation_Category = rest_inspect.groupby(['Neighborhood', 'Violati
 Neighborhood_Violation_Category_Table = Neighborhood_Violation_Category.pivot(index='Neighborhood', columns='Violation Category', values='Counts')
 Neighborhood_Violation_Category_Table = Neighborhood_Violation_Category_Table.fillna(0)
 
-Neighborhood_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(12, 8))
+Neighborhood_Violation_Category_Table.plot(kind='bar', stacked=True, figsize=(10, 8))
 plt.title('Violation Types by Neighborhood')
 plt.xlabel('Neighborhood')
 plt.ylabel('Counts of Violations')
@@ -281,7 +280,6 @@ plt.show()
 ```
 
 # Testing Hypothesis {.scrollable}
-
 
 ## Cuisine Category and Violation Category {.scrollable}
 
@@ -302,9 +300,10 @@ print(f"Degrees of Freedom: {dof}")
 
 This indicates that *there is a statistically significant association between the type of cuisine and the type of violations*. Different cuisines appear to have different types or frequencies of health violations.
 
-## Food Health Problems Across Geographic Areas{.scrollable}
+## Food Health Problems Across Geographic Areas {.scrollable}
 
 ### Violation by Neighborhood {.scrollable}
+
 ```{python}
 # Null Hypothesis (H0): No association between Cuisine Category and Violation Category.
 # Alternative Hypothesis (HA): Association between Cuisine Category and Violation Category.
@@ -323,6 +322,7 @@ print(f"Degrees of Freedom: {dof}")
 This indicates that *there is no statistically significant association between neighborhoods and types of violations*.
 
 ### Violation by Zipcode {.scrollable}
+
 ```{python}
 # Null Hypothesis (H0): No association between ZIP Code and Violation Category.
 # Alternative Hypothesis (HA): Association between ZIP Code and Violation Category.
@@ -349,8 +349,8 @@ This indicates that the geographic area does not significantly affect the type o
 rest_inspect['Critical Indicator'] = np.where(rest_inspect['CRITICAL FLAG'] == 'Critical', 1, 0)
 ```
 
-
 ## Logistic Regression Model {.scrollable}
+
 ```{python}
 type_crit = pd.crosstab(rest_inspect['Cuisine Category'], rest_inspect['Critical Indicator'])
 
@@ -394,8 +394,8 @@ print("Accuracy:", accuracy)
 print("Confusion Matrix:\n", conf_matrix)
 ```
 
-
 ## Random forests {.scrollable}
+
 ```{python}
 # transform categorical variables into dummy variables
 # drop='first' helps to prevent multicollinearity
@@ -423,8 +423,17 @@ print("Accuracy:", accuracy)
 print("Confusion Matrix:\n", conf_matrix)
 ```
 
+# Conclusions {.scrollable}
 
-## Conclusions {.scrollable}
+## Relevant Resourses {.scrollable}
+- Indicators of food hygiene problems: https://www.nyc.gov/assets/doh/downloads/pdf/rii/ri-violation-penalty.pdf
+- report of Rodent sighting in restaurants:https://portal.311.nyc.gov/sr-step/?id=d7e0dc80-d3fa-ee11-a73c-002248537b23&stepid=4a51f5a5-b04c-e811-a835-000d3a33b1e4
+-  Finding hygiene problems in a specific restaurant: https://www.nyc.gov/site/doh/services/restaurant-grades.page
 
+## Reprot {.scrollable}
 
+In conclusion, American restaurants, dessert stores, and East Asian establishments (Chinese, Korean, Japanese) are more likely to encounter food safety issues, especially in the Midtown and Downtown areas, compared to Uptown. The primary concerns involve unregulated facilities and incorrect food handling methods, and rodent sighting. Addressing these issues is crucial to improve food safety across these regions and restaurant types.
 
+## Limitations {.scrollable}
+-  Sample Representation Bias: The apparent prominence of problems in American restaurants might be influenced by their higher representation in the sample rather than an actual increase in safety issues.
+-  Cultural Practices: Certain violations, may stem from cultural practices that conflict with local regulations.
